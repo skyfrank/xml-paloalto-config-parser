@@ -533,15 +533,39 @@ function App() {
     return valuesByRule;
   }, [parsed?.rules, addressGroupMap, addressValueByName]);
 
+  const ruleResolvedAddressNames = useMemo(() => {
+    const namesByRule = new Map<RuleObject, string[]>();
+
+    for (const rule of parsed?.rules || []) {
+      const resolvedNames = new Set<string>();
+      for (const ref of [...rule.source, ...rule.destination]) {
+        if (addressGroupMap.has(ref)) {
+          for (const name of resolveGroupMembers(ref, addressGroupMap)) {
+            resolvedNames.add(name);
+          }
+        }
+      }
+      namesByRule.set(rule, [...resolvedNames]);
+    }
+
+    return namesByRule;
+  }, [parsed?.rules, addressGroupMap]);
+
   const filterRulesByQuery = (rules: RuleObject[], query: string): RuleObject[] => {
     const cleanQuery = query.trim();
     if (!cleanQuery) {
       return rules;
     }
 
+    const cleanQueryLower = cleanQuery.toLowerCase();
     const ipQuery = isIPv4(cleanQuery);
     return rules.filter((rule) => {
       if (recursiveMatch(rule, cleanQuery)) {
+        return true;
+      }
+
+      const resolvedNames = ruleResolvedAddressNames.get(rule) || [];
+      if (resolvedNames.some((name) => name.toLowerCase().includes(cleanQueryLower))) {
         return true;
       }
 
@@ -988,7 +1012,6 @@ function App() {
         <thead>
           <tr>
             <th>Name</th>
-            <th>Protocol</th>
             <th>Destination Port</th>
             <th>Source Port</th>
           </tr>
@@ -1004,8 +1027,7 @@ function App() {
             return (
               <tr key={member}>
                 <td>{member}</td>
-                <td>{details.protocol}</td>
-                <td>{details.destinationPort}</td>
+                <td>{renderServicePortPills(details.protocol, details.destinationPort)}</td>
                 <td>{details.sourcePort}</td>
               </tr>
             );
@@ -1086,12 +1108,8 @@ function App() {
       return (
         <div className="modal-grid">
           <div>
-            <strong>Protocol</strong>
-            <p>{payload.protocol || "-"}</p>
-          </div>
-          <div>
             <strong>Destination Port</strong>
-            <p>{payload.destinationPort || "-"}</p>
+            <p>{renderServicePortPills(payload.protocol, payload.destinationPort)}</p>
           </div>
           <div>
             <strong>Source Port</strong>
