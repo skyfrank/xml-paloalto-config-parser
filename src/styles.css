@@ -353,6 +353,29 @@ td {
   cursor: default;
 }
 
+.port-pill {
+  cursor: default;
+  font-weight: 600;
+}
+
+.port-pill--tcp {
+  border-color: #8fc0f2;
+  background: #e7f2ff;
+  color: #144a8a;
+}
+
+.port-pill--udp {
+  border-color: #d391d6;
+  background: #fbe8fc;
+  color: #7a1f80;
+}
+
+.port-pill--unknown {
+  border-color: #c7ccd1;
+  background: #eef1f3;
+  color: #4c5761;
+}
+
 .link-btn {
   border: 0;
   background: transparent;

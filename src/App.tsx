@@ -58,7 +58,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<TabKey, number[]> = {
   nat: [50, 250, 80, 180, 180, 250, 250, 120, 210, 210, 140],
   addresses: [240, 120, 230, 220, 260],
   addressGroups: [240, 260, 200, 220],
-  services: [240, 140, 180, 170, 260],
+  services: [240, 200, 170, 300],
   serviceGroups: [240, 300],
   interfaces: [220, 120, 120, 110, 300, 240, 220],
   vrfRoutes: [240, 220, 220, 220, 160, 110],
@@ -71,7 +71,7 @@ const MIN_COLUMN_WIDTHS: Record<TabKey, number[]> = {
   nat: [24, 120, 55, 100, 100, 120, 120, 80, 120, 120, 90],
   addresses: [140, 80, 120, 120, 140],
   addressGroups: [140, 170, 120, 140],
-  services: [140, 90, 120, 110, 140],
+  services: [140, 130, 110, 140],
   serviceGroups: [140, 220],
   interfaces: [130, 80, 80, 80, 170, 150, 120],
   vrfRoutes: [140, 120, 120, 120, 100, 70],
@@ -238,6 +238,23 @@ function previewList(values: string[], maxLength = 90): string {
 
   const clipped = joined.slice(0, Math.max(0, maxLength - 1)).trimEnd();
   return `${clipped}…`;
+}
+
+function renderServicePortPills(protocol: string, destinationPort: string) {
+  const proto = (protocol || "").toLowerCase();
+  const protoClass = proto === "tcp" ? "port-pill--tcp" : proto === "udp" ? "port-pill--udp" : "port-pill--unknown";
+  const label = proto && proto !== "unknown" ? proto : "unknown";
+  const ports = destinationPort ? destinationPort.split(",").map((port) => port.trim()).filter(Boolean) : [""];
+
+  return (
+    <div className="pill-row">
+      {ports.map((port, index) => (
+        <span key={`${port}-${index}`} className={`pill port-pill ${protoClass}`}>
+          {port ? `${label}/${port}` : label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ObjectList({
@@ -1481,16 +1498,15 @@ function App() {
             {activeTab === "services" && (
               <div className="table-wrap">
               <table className="resizable-table">
-                {renderColGroup("services", 5)}
+                {renderColGroup("services", 4)}
                 <thead>
-                  {renderResizableHeader("services", ["Name", "Protocol", "Destination Port", "Source Port", "Description"])}
+                  {renderResizableHeader("services", ["Name", "Destination Port", "Source Port", "Description"])}
                 </thead>
                 <tbody>
                   {visibleServices.map((service) => (
                     <tr key={service.name}>
                       <td>{service.name}</td>
-                      <td>{service.protocol}</td>
-                      <td>{service.destinationPort}</td>
+                      <td>{renderServicePortPills(service.protocol, service.destinationPort)}</td>
                       <td>{service.sourcePort}</td>
                       <td>{service.description || ""}</td>
                     </tr>
