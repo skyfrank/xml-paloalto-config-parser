@@ -23,6 +23,19 @@ const parser = new XMLParser({
   trimValues: true,
 });
 
+const interfaceNameCollator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+function interfaceOrder(name: string): number {
+  const normalizedName = name.toLowerCase();
+  if (normalizedName.startsWith("ethernet")) {
+    return 0;
+  }
+  if (normalizedName.startsWith("ae")) {
+    return 1;
+  }
+  return 2;
+}
+
 // Normalizes unknown nodes into plain objects so parser code can safely inspect keys.
 function asObject(value: unknown): AnyObject {
   return typeof value === "object" && value !== null ? (value as AnyObject) : {};
@@ -412,6 +425,10 @@ function parseInterfaces(root: unknown): InterfaceObject[] {
       ips,
       zoneRefs: [],
       comment: text(entry.comment),
+      linkState: text(entry["link-state"]),
+      linkSpeed: text(entry["link-speed"]),
+      linkDuplex: text(entry["link-duplex"]),
+      lacpPortPriority: text(asObject(entry.lacp)["port-priority"]),
       raw: entry,
     });
   };
@@ -476,6 +493,9 @@ function parseInterfaces(root: unknown): InterfaceObject[] {
       aggregateParent,
       aggregateMembers,
     };
+  }).sort((left, right) => {
+    const orderDifference = interfaceOrder(left.name) - interfaceOrder(right.name);
+    return orderDifference || interfaceNameCollator.compare(left.name, right.name);
   });
 }
 
@@ -524,7 +544,6 @@ function collectSummaryPairs(value: unknown, prefix = "", out: [string, string][
 
 function parseConfigBlocks(root: unknown): ConfigBlockObject[] {
   const blockSpecs: { category: string; keys: string[] }[] = [
-    { category: "HA", keys: ["high-availability", "ha"] },
     { category: "Logging", keys: ["log-settings", "syslog", "snmptrap", "email-server"] },
     { category: "RADIUS", keys: ["radius-server-profile", "radius"] },
     { category: "TACACS", keys: ["tacplus-server-profile", "tacacs-plus", "tacacs"] },
@@ -570,6 +589,90 @@ function parseConfigBlocks(root: unknown): ConfigBlockObject[] {
           });
         });
       }
+    }
+  }
+
+  return blocks;
+}
+
+function parseLinkMonitoringBlocks(root: unknown): ConfigBlockObject[] {
+  const blocks: ConfigBlockObject[] = [];
+
+  for (const node of findNodesByKey(root, "link-monitoring")) {
+    const linkGroup = asObject(asObject(node.value)["link-group"]);
+    for (const entry of entriesFromContainer(linkGroup)) {
+      const name = text(entry["@_name"]);
+      if (!name) {
+        continue;
+      }
+
+      const interfaces = memberList(asObject(entry.interface));
+      const failureCondition = text(entry["failure-condition"]);
+      const details: Record<string, string> = {};
+      if (interfaces.length) {
+        details.interface = interfaces.join(", ");
+      }
+      if (failureCondition) {
+        details["failure-condition"] = failureCondition;
+      }
+
+      blocks.push({
+        category: "HA Link Monitoring",
+        name,
+        path: `${node.path.join("/")}/link-group`,
+        summary: [
+          interfaces.length ? `Interfaces: ${interfaces.join(", ")}` : "",
+          failureCondition ? `Failure condition: ${failureCondition}` : "",
+        ]
+          .filter(Boolean)
+          .join(" | ") || "Link group discovered",
+        details,
+        raw: entry,
+      });
+    }
+  }
+
+  return blocks;
+}
+
+function parseHaInterfaceBlocks(root: unknown): ConfigBlockObject[] {
+  const blocks: ConfigBlockObject[] = [];
+
+  for (const node of findNodesByKey(root, "high-availability")) {
+    const highAvailability = asObject(node.value);
+    const interfaceContainer = asObject(highAvailability.interface);
+    const group = asObject(highAvailability.group);
+    const peerIp = text(group["peer-ip"]);
+    const peerIpBackup = text(group["peer-ip-backup"]);
+    for (const [name, value] of Object.entries(interfaceContainer)) {
+      const entry = asObject(value);
+      const port = text(entry.port);
+      const ipAddress = text(entry["ip-address"]);
+      const netmask = text(entry.netmask);
+      const interfacePeerIp = name === "ha1" ? peerIp : name === "ha1-backup" ? peerIpBackup : "";
+      const details: Record<string, string> = {};
+
+      if (port) {
+        details.port = port;
+      }
+      if (ipAddress) {
+        details["ip-address"] = ipAddress;
+      }
+      if (netmask) {
+        details.netmask = netmask;
+      }
+      if (interfacePeerIp) {
+        details["peer-ip"] = interfacePeerIp;
+      }
+
+      blocks.push({
+        category: "HA Interface",
+        name,
+        path: `${node.path.join("/")}/interface/${name}`,
+        summary: interfacePeerIp ? `Peer IP: ${interfacePeerIp}` : "HA connectivity",
+        details,
+        raw: entry,
+      });
     }
   }
 
@@ -691,7 +794,11 @@ export function parsePaloAltoConfig(xml: string): ParsedConfig {
   const zones = parseZones(document);
   const interfaces = linkZonesToInterfaces(parseInterfaces(document), zones);
   const vrfRoutes = parseVrfRoutes(document);
-  const systemBlocks = parseConfigBlocks(document);
+  const systemBlocks = [
+    ...parseHaInterfaceBlocks(document),
+    ...parseConfigBlocks(document),
+    ...parseLinkMonitoringBlocks(document),
+  ];
 
   return {
     addresses,

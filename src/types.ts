@@ -44,6 +44,10 @@ export interface InterfaceObject {
   ips: string[];
   zoneRefs: string[];
   comment?: string;
+  linkState?: string;
+  linkSpeed?: string;
+  linkDuplex?: string;
+  lacpPortPriority?: string;
   raw: unknown;
 }
 

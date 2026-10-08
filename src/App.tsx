@@ -60,10 +60,10 @@ const DEFAULT_COLUMN_WIDTHS: Record<TabKey, number[]> = {
   addressGroups: [240, 260, 200, 220],
   services: [240, 200, 170, 300],
   serviceGroups: [240, 300],
-  interfaces: [220, 120, 120, 110, 300, 240, 220],
+  interfaces: [220, 120, 120, 110, 300, 240, 220, 320],
   vrfRoutes: [240, 220, 220, 220, 160, 110],
   zones: [260, 170, 380],
-  systemBlocks: [130, 220, 330, 480],
+  systemBlocks: [150, 220, 260, 260, 300],
 };
 
 const MIN_COLUMN_WIDTHS: Record<TabKey, number[]> = {
@@ -73,10 +73,10 @@ const MIN_COLUMN_WIDTHS: Record<TabKey, number[]> = {
   addressGroups: [140, 170, 120, 140],
   services: [140, 130, 110, 140],
   serviceGroups: [140, 220],
-  interfaces: [130, 80, 80, 80, 170, 150, 120],
+  interfaces: [130, 80, 80, 80, 170, 150, 120, 220],
   vrfRoutes: [140, 120, 120, 120, 100, 70],
   zones: [140, 100, 170],
-  systemBlocks: [90, 140, 180, 200],
+  systemBlocks: [100, 140, 160, 180, 180],
 };
 
 const TAB_KEYS = new Set<TabKey>(TAB_ORDER.map((tab) => tab.key));
@@ -255,6 +255,11 @@ function renderServicePortPills(protocol: string, destinationPort: string) {
       ))}
     </div>
   );
+}
+
+function splitIpAndMask(value: string): { ip: string; mask: string } {
+  const [ip, mask] = value.split("/", 2);
+  return { ip, mask: mask || "-" };
 }
 
 function ObjectList({
@@ -493,6 +498,10 @@ function App() {
   const visibleRoutes = filterItems(parsed?.vrfRoutes || [], queries.vrfRoutes);
   const visibleZones = filterItems(parsed?.zones || [], queries.zones);
   const visibleSystemBlocks = filterItems(parsed?.systemBlocks || [], queries.systemBlocks);
+  const interfaceByName = useMemo(
+    () => new Map((parsed?.interfaces || []).map((iface) => [iface.name, iface])),
+    [parsed?.interfaces],
+  );
 
   const interfaceKindByName = useMemo(() => {
     type InterfaceKind = "aggregate" | "aggregate-subinterface" | "physical-subinterface" | "physical";
@@ -1560,7 +1569,7 @@ function App() {
             {activeTab === "interfaces" && (
               <div className="table-wrap">
               <table className="resizable-table">
-                {renderColGroup("interfaces", 7)}
+                {renderColGroup("interfaces", 8)}
                 <thead>
                   {renderResizableHeader("interfaces", [
                     "Name",
@@ -1570,6 +1579,7 @@ function App() {
                     "Aggregate Relation",
                     "IP Addresses",
                     "Zone",
+                    "Port Properties",
                   ])}
                 </thead>
                 <tbody>
@@ -1606,6 +1616,20 @@ function App() {
                       </td>
                       <td>{iface.ips.join(", ") || "-"}</td>
                       <td>{iface.zoneRefs.join(", ") || "-"}</td>
+                      <td>
+                        {iface.linkState || iface.linkSpeed || iface.linkDuplex || iface.lacpPortPriority ? (
+                          <div className="pill-row">
+                            {iface.linkState && <span className="pill port-property-pill">State: {iface.linkState}</span>}
+                            {iface.linkSpeed && <span className="pill port-property-pill">Speed: {iface.linkSpeed}</span>}
+                            {iface.linkDuplex && <span className="pill port-property-pill">Duplex: {iface.linkDuplex}</span>}
+                            {iface.lacpPortPriority && (
+                              <span className="pill port-property-pill">LACP: {iface.lacpPortPriority}</span>
+                            )}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1677,17 +1701,75 @@ function App() {
             {activeTab === "systemBlocks" && (
               <div className="table-wrap">
               <table className="resizable-table">
-                {renderColGroup("systemBlocks", 4)}
+                {renderColGroup("systemBlocks", 5)}
                 <thead>
-                  {renderResizableHeader("systemBlocks", ["Category", "Name", "Path", "Summary"])}
+                  {renderResizableHeader("systemBlocks", ["Category", "Name", "Port / Interface", "IP / Mask", "Summary"])}
                 </thead>
                 <tbody>
                   {visibleSystemBlocks.map((block) => (
                     <tr key={`${block.category}-${block.path}-${block.name}`}>
-                      <td>{block.category}</td>
+                      <td>
+                        <span className={`pill system-category-pill system-category-pill--${block.category.startsWith("HA ") ? "ha" : "default"}`}>
+                          {block.category}
+                        </span>
+                      </td>
                       <td>{block.name}</td>
-                      <td>{block.path}</td>
-                      <td title={block.summary}>{block.summary}</td>
+                      <td>
+                        {block.category === "HA Interface" && block.details.port ? (
+                          <span className="pill member-pill member-pill--physical">{block.details.port}</span>
+                        ) : block.category === "HA Link Monitoring" && block.details.interface ? (
+                          <div className="pill-row">
+                            {block.details.interface.split(", ").map((member) => (
+                              <span
+                                key={member}
+                                className={`pill member-pill member-pill--${interfaceKindByName.get(member) || "physical"}`}
+                              >
+                                {member}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
+                      </td>
+                      <td>
+                        {block.category === "HA Interface" && (block.details["ip-address"] || block.details.netmask) ? (
+                          <div className="pill-row">
+                            <span className="pill system-ip-pill">
+                              {block.details["ip-address"] || "-"} / {block.details.netmask || "-"}
+                            </span>
+                          </div>
+                        ) : block.category === "HA Link Monitoring" && block.details.interface ? (
+                          <div className="pill-row">
+                            {block.details.interface.split(", ").flatMap((member) =>
+                              (interfaceByName.get(member)?.ips || []).map((address) => {
+                                const { ip, mask } = splitIpAndMask(address);
+                                return <span key={`${member}-${address}`} className="pill system-ip-pill">{ip} / {mask}</span>;
+                              }),
+                            )}
+                            {!block.details.interface.split(", ").some((member) => (interfaceByName.get(member)?.ips || []).length > 0) && (
+                              <span className="muted">-</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
+                      </td>
+                      <td title={block.summary}>
+                        {block.category === "HA Link Monitoring" && block.details["failure-condition"] ? (
+                          <span className={`pill failure-pill failure-pill--${block.details["failure-condition"]}`}>
+                            Failure: {block.details["failure-condition"]}
+                          </span>
+                        ) : block.category === "HA Interface" ? (
+                          block.details["peer-ip"] ? (
+                            <span className="pill system-ip-pill">Peer IP: {block.details["peer-ip"]}</span>
+                          ) : (
+                            <span className="muted">HA connectivity</span>
+                          )
+                        ) : (
+                          block.summary
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

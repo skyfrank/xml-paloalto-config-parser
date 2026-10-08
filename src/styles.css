@@ -353,6 +353,54 @@ td {
   cursor: default;
 }
 
+.system-category-pill {
+  cursor: default;
+  font-weight: 600;
+}
+
+.system-category-pill--ha {
+  border-color: #d391d6;
+  background: #fbe8fc;
+  color: #7a1f80;
+}
+
+.system-category-pill--default {
+  border-color: #a9bcc3;
+  background: #eef4f6;
+  color: #3f5961;
+}
+
+.system-ip-pill {
+  border-color: #8fc0f2;
+  background: #e7f2ff;
+  color: #144a8a;
+  cursor: default;
+}
+
+.system-mask-pill {
+  border-color: #9fc8c3;
+  background: #e8fffb;
+  color: #12484f;
+  cursor: default;
+}
+
+.failure-pill {
+  cursor: default;
+  font-weight: 600;
+}
+
+.failure-pill--all {
+  border-color: #e0b34d;
+  background: #fff4da;
+  color: #7a4e00;
+}
+
+.failure-pill--any {
+  border-color: #efaaa4;
+  background: #fff0ee;
+  color: #8c3028;
+}
+
 .port-pill {
   cursor: default;
   font-weight: 600;
@@ -368,6 +416,13 @@ td {
   border-color: #d391d6;
   background: #fbe8fc;
   color: #7a1f80;
+}
+
+.port-property-pill {
+  border-color: #9fc8c3;
+  background: #e8fffb;
+  color: #12484f;
+  cursor: default;
 }
 
 .port-pill--unknown {
